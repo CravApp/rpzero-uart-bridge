@@ -1,46 +1,45 @@
-name: pico-uart-bridge
+name: Build RP2040 UF2
 
 on:
-  - push
-  - pull_request
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - board: pico
-            name: Raspberry Pi Pico
-          - board: pico2
-            name: Raspberry Pi Pico 2
     steps:
-      - name: 'Check out code'
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: 'Install dependencies'
+      - name: Install packages
         run: |
-          sudo apt-get install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build gcc-arm-none-eabi git python3-pip python3-venv libnewlib-arm-none-eabi
+          pip3 install --upgrade pip
 
-      - name: 'Update Submodules'
+      - name: Clone pico-sdk
         run: |
-          git submodule sync --recursive
+          git clone --depth 1 https://github.com/raspberrypi/pico-sdk.git $GITHUB_WORKSPACE/pico-sdk
+          cd $GITHUB_WORKSPACE/pico-sdk
           git submodule update --init --recursive
 
-      - name: 'Configure'
+      - name: Configure build
         run: |
           mkdir -p build
-          cmake -B build -DPICO_BOARD=${{ matrix.board }}
+          cd build
+          export PICO_SDK_PATH=${GITHUB_WORKSPACE}/pico-sdk
+          cmake -S .. -B . -G Ninja -DPICO_SDK_PATH=${GITHUB_WORKSPACE}/pico-sdk
 
-      - name: 'Build'
+      - name: Build
         run: |
-          make -C build
+          cd build
+          ninja
 
-      - name: 'Upload binary'
+      - name: Upload UF2 and ELF
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.board }}-uart-bridge.uf2
-          path: build/uart_bridge.uf2
-          retention-days: 5
+          name: rpzero-usb-uart-artifacts
+          path: |
+            build/**/*.uf2
+            build/**/*.elf
